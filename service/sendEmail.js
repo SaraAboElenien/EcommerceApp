@@ -2,21 +2,22 @@ import { createTransport } from "nodemailer";
 
 
 
-export const sendEmail = async (to, subject, html ) => {
+export const sendEmail = async (to, subject, html, attachments = [] ) => {
     const transporter = createTransport({
         service: "gmail",
         auth: {
-            user: "sm5108940@gmail.com",
-            pass: "mbjsoeevuccqzqwq",
+            user: process.env.sendEmail,
+            pass: process.env.emailPassword,
         },
     });
 
     const info = await transporter.sendMail({
-        from: '"welcome 👻" <sm5108940@gmail.com>',
+        from: `"welcome 👻" <${process.env.sendEmail}>`,
         to: to? to:"" ,
         subject:subject? subject: "HelloHelloHello",
         // text: "Hello world?",
         html: html? html: "HelloHelloHello",
+        attachments
     });
     console.log(info);
     if (info.accepted.length) {

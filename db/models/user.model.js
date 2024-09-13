@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-
+import { systemRoles } from '../../utils/systemRoles.js';
 const userSchema = new mongoose.Schema({
     firstName: {
         type: String,
@@ -30,7 +30,9 @@ const userSchema = new mongoose.Schema({
         required: true, unique: true
     },
     address: [String],
-    role: { type: String, enum: ['User', 'Admin'], default: 'User' },
+    role: { type: String,
+         enum: Object.values(systemRoles),
+         default: systemRoles.user},
     confirmed: {
         type: Boolean,
         default: false
@@ -39,7 +41,8 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
-    code: { type: String }
+    code: { type: String },
+    passwordChangedAt: Date
 
 }, {
     timestamps: true,

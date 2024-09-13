@@ -1,20 +1,26 @@
-import Joi from 'joi';  // Correctly import Joi
+import joi from 'joi';  
+import { generalField } from '../../../utils/generalFields.js'
 
-export const signupValidationSchema = Joi.object({
-    firstName: Joi.string().min(3).max(30).required(),
-    lastName: Joi.string().min(3).max(30).required(),
-    password: Joi.string().pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$'))
+export const signupValidationSchema = {
+ body: joi.object({
+    firstName: joi.string().min(3).max(30).required(),
+    lastName: joi.string().min(3).max(30).required(),
+    password: joi.string().pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$'))
         .min(8).required(),
-    email: Joi.string().email().required(),
+    email: joi.string().email().required(),
+    id: generalField.id.required()
+}),
+file: generalField.file.required(),
+headers: generalField.headers.required()
+};
+
+export const signinValidationSchema = joi.object({
+    email: joi.string().email().required(),
+    password: joi.string().pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$'))
+        .min(8).required(),
 });
 
-export const signinValidationSchema = Joi.object({
-    email: Joi.string().email().required(),
-    password: Joi.string().pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$'))
-        .min(8).required(),
-});
-
-export const updatePasswordSchema = Joi.object({
-    oldPassword: Joi.string().required(),
-    newPassword: Joi.string().min(6).required(),
+export const updatePasswordSchema = joi.object({
+    oldPassword: joi.string().required(),
+    newPassword: joi.string().min(6).required(),
 });
