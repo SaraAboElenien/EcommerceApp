@@ -4,9 +4,10 @@ import { AppError } from '../../../utils/classError.js';
 import productModel from '../../../db/models/product.model.js';
 import couponModel from '../../../db/models/coupon.model.js'
 import cartModel from '../../../db/models/cart.model.js'
-import {createInvoice } from '../../../utils/pdf.js'
+import { createInvoice } from '../../../utils/pdf.js'
 import { sendEmail } from '../../../service/sendEmail.js';
-
+import Stripe from 'stripe';
+import { payment } from '../../../utils/payment.js';
 
 //========== createOrder ===========//
 export const createOrder = asyncHandler(async (req, res, next) => {
@@ -75,54 +76,94 @@ export const createOrder = asyncHandler(async (req, res, next) => {
         address,
     });
 
-if (req.body?.coupon) {
-    await couponModel.updateOne({_id: req.body.coupon._id},{
-        $push: {userBy: req.user._id}
-    })
-}
+    if (req.body?.coupon) {
+        await couponModel.updateOne({ _id: req.body.coupon._id }, {
+            $push: { userBy: req.user._id }
+        })
+    }
 
-for (const product of finalProducts) {
-    await productModel.findByIdAndUpdate({
-        _id: product.productId},
-        {$inc: { stock: -product.quantity }
-    })
-}
+    for (const product of finalProducts) {
+        await productModel.findByIdAndUpdate({
+            _id: product.productId
+        },
+            {
+                $inc: { stock: -product.quantity }
+            })
+    }
 
-if (isCartOrder) {
-    await cartModel.updateOne({ user: req.user._id}, { products: []})
-}
+    if (isCartOrder) {
+        await cartModel.updateOne({ user: req.user._id }, { products: [] })
+    }
 
-const invoice = {
-    shipping: {
-      name: req.user.firstName,
-      address: req.user.address,
-      city: "San Francisco",
-      state: "CA",
-      country: "US",
-      postal_code: 94111
-    },
-    items: order.products,
-    subtotal: subPrice,
-    paid: order.totalPrice,
-    invoice_nr: order._id,
-    date: order.createdAt,
-    coupon: req.body?.coupon?.amount || 0
-  };
-  
-   await createInvoice(invoice, "invoice.pdf");
+    // const invoice = {
+    //     shipping: {
+    //       name: req.user.firstName,
+    //       address: req.user.address,
+    //       city: "San Francisco",
+    //       state: "CA",
+    //       country: "US",
+    //       postal_code: 94111
+    //     },
+    //     items: order.products,
+    //     subtotal: subPrice,
+    //     paid: order.totalPrice,
+    //     invoice_nr: order._id,
+    //     date: order.createdAt,
+    //     coupon: req.body?.coupon?.amount || 0
+    //   };
 
-   await sendEmail(req.user.email, "Order Placed", "Your order has been confirmed successfully",[
-    {
-        path: "invoice.pdf",
-        contentType: "application/pdf"
-    },
+    //    await createInvoice(invoice, "invoice.pdf");
+
+    //    await sendEmail(req.user.email, "Order Placed", "Your order has been confirmed successfully",[
+    //     {
+    //         path: "invoice.pdf",
+    //         contentType: "application/pdf"
+    //     },
     // {
     //     path: "invoice.image",
     //     contentType: "image/jpg"
 
     // }
-   ])
+    //    ])
 
+    if (paymentMethod == "Pay with credit or debit card") {
+        const stripe = new Stripe(process.env.Stripe_key)
+
+        if (req.body?.coupon) {
+            const coupon = await stripe.coupons.create({
+                percent_off: req.body.coupon.amount,
+                duration: "once"
+            })
+            req.body.couponId = coupon.id
+        }
+
+        const session = await payment({
+            stripe,
+            payment_method_types: ["card"],
+            mode: "payment",
+            customer_email: req.user.email,
+            metadata: {
+                orderId: order._id.toString()
+            },
+            success_url: `${req.protocol}://${req.headers.host}/order/${order._id}`,
+            cancel_url: `${req.protocol}://${req.headers.host}/order/${order._id}`,
+            line_items : order.products.map((product) => {
+                return{
+                    price_data:{
+                        currency: "EGP",
+                        product_data:{
+                            name: product.title
+                        },
+                        unit_amount: product.price * 100
+                    },
+                    quantity: product.quantity,
+                }
+            }),
+        discounts: req.coupon?.coupon? [{ coupon: req.body.couponId}] : []
+        })
+        return res.status(201).json({ message: "payment method has been confirmed successfully", url: session.url, order });
+
+    }
     return res.status(201).json({ message: "Your order has been confirmed successfully", order });
 });
 
@@ -145,10 +186,10 @@ export const cancelOrder = asyncHandler(async (req, res, next) => {
         return next(new AppError("Order not found ", 404));
     }
 
-if ((order.paymentMethod === "Cash on delivery" && order.status != "Order Placed") ||(order.paymentMethod === "Pay with credit or debit card" && order.status != "Payment")) {
-    return next(new AppError("Order cannot be canceled at this stage ", 404));
- 
-}
+    if ((order.paymentMethod === "Cash on delivery" && order.status != "Order Placed") || (order.paymentMethod === "Pay with credit or debit card" && order.status != "Payment")) {
+        return next(new AppError("Order cannot be canceled at this stage ", 404));
+
+    }
 
     // Update the order status to "Cancelled"
     order.status = "Cancelled";
